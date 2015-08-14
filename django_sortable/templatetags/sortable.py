@@ -36,15 +36,16 @@ class SortableLinkNode(template.Node):
 
   def __init__(self, field_name, title):
     if field_name.startswith('-'):
-      self.field_name = field_name[1:]
+      field_name = field_name[1:]
       self.default_direction = 'desc'
     elif field_name.startswith('+'):
-      self.field_name = field_name[1:]
+      field_name = field_name[1:]
       self.default_direction = 'asc'
     else:
-      self.field_name = field_name
+      field_name = field_name
       self.default_direction = 'asc'
 
+    self.field_name = template.Variable(field_name)
     self.title = template.Variable(title)
 
 
@@ -61,22 +62,26 @@ class SortableLinkNode(template.Node):
       del(get_params['dir'])
     direction = direction if direction in ('asc', 'desc') else 'asc'
 
+    try:
+        own_field_name = self.field_name.resolve(context)
+    except template.VariableDoesNotExist:
+        own_field_name = str(self.field_name.var)
     # if is current field, and sort isn't defined, assume asc otherwise desc
-    direction = direction or ((self.field_name == field_name) and 'asc' or 'desc')
+    direction = direction or ((own_field_name == field_name) and 'asc' or 'desc')
 
     # if current field and it's sorted, make link inverse, otherwise defalut to asc
-    if self.field_name == field_name:
+    if own_field_name == field_name:
       get_params['dir'] = directions[direction]['inverse']
     else:
       get_params['dir'] = self.default_direction
 
-    if self.field_name == field_name:
+    if own_field_name == field_name:
       css_class = directions[direction]['class']
     else:
       css_class = SORT_NONE_CLASS
 
     params = "&%s" % (get_params.urlencode(),) if len(get_params.keys()) > 0 else ''
-    url = ('%s?sort=%s%s' % (context['request'].path, self.field_name, params)).replace('&', '&amp;')
+    url = ('%s?sort=%s%s' % (context['request'].path, own_field_name, params)).replace('&', '&amp;')
 
     return (url, css_class)
 
