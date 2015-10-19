@@ -9,6 +9,8 @@ SORT_ASC_CLASS = getattr(settings, 'SORT_ASC_CLASS' , 'sort-asc')
 SORT_DESC_CLASS = getattr(settings, 'SORT_DESC_CLASS' , 'sort-desc')
 SORT_NONE_CLASS = getattr(settings, 'SORT_DESC_CLASS' , 'sort-none')
 
+DEFAULT_TH_CLASS = 'sortable-col'
+
 directions = {
   'asc': {'class': SORT_ASC_CLASS, 'inverse': 'desc'},
   'desc': {'class': SORT_DESC_CLASS, 'inverse': 'asc'},
@@ -16,10 +18,12 @@ directions = {
 
 
 def parse_tag_token(token):
-  """Parses a tag that's supposed to be in this format: {% sortable_link field title %}  """
+  """Parses a tag that's supposed to be in this format: {% sortable_link field title %}
+     sortable_header supports a 3rd argument, which will be an extra css class of the th
+  """
   bits = [b.strip('"\'') for b in token.split_contents()]
   if len(bits) < 2:
-    raise TemplateSyntaxError, "anchor tag takes at least 1 argument"
+    raise TemplateSyntaxError, "tag takes at least 1 argument"
   try:
     title = bits[2]
   except IndexError:
@@ -27,14 +31,17 @@ def parse_tag_token(token):
       title = bits[1][1:].capitalize()
     else:
       title = bits[1].capitalize()
-
-  return (bits[1].strip(), title.strip())
+  try:
+    extra_th_class = bits[3]
+  except IndexError:
+    extra_th_class = DEFAULT_TH_CLASS
+  return (bits[1].strip(), title.strip(), extra_th_class.strip())
 
 
 class SortableLinkNode(template.Node):
   """Build sortable link based on query params."""
 
-  def __init__(self, field_name, title):
+  def __init__(self, field_name, title, extra_th_class):
     if field_name.startswith('-'):
       field_name = field_name[1:]
       self.default_direction = 'desc'
@@ -47,7 +54,7 @@ class SortableLinkNode(template.Node):
 
     self.field_name = template.Variable(field_name)
     self.title = template.Variable(title)
-
+    self.extra_th_class = template.Variable(extra_th_class)
 
   def build_link(self, context):
     """Prepare link for rendering based on context."""
@@ -85,7 +92,6 @@ class SortableLinkNode(template.Node):
 
     return (url, css_class)
 
-
   def render(self, context):
     url, css_class = self.build_link(context)
     try:
@@ -104,7 +110,15 @@ class SortableTableHeaderNode(SortableLinkNode):
         title = self.title.resolve(context)
     except template.VariableDoesNotExist:
         title = str(self.title.var)
-    return '<th class="%s"><a href="%s" title="%s">%s</a></th>' % (css_class, url, title, title)
+    try:
+        extra_th_class = self.extra_th_class.resolve(context)
+    except template.VariableDoesNotExist:
+        extra_th_class = str(self.extra_th_class.var)
+    if extra_th_class and extra_th_class != DEFAULT_TH_CLASS:
+        extra_th_class = '{} {}'.format(DEFAULT_TH_CLASS, extra_th_class)
+    else:
+        extra_th_class = DEFAULT_TH_CLASS
+    return '<th class="%s %s"><a href="%s" title="%s">%s</a></th>' % (css_class, extra_th_class, url, title, title)
 
 
 class SortableURLNode(SortableLinkNode):
@@ -124,23 +138,23 @@ class SortableClassNode(SortableLinkNode):
 
 
 def sortable_link(parser, token):
-  field, title = parse_tag_token(token)
-  return SortableLinkNode(field, title)
+  field, title, extra_th_class = parse_tag_token(token)
+  return SortableLinkNode(field, title, extra_th_class)
 
 
 def sortable_header(parser, token):
-  field, title = parse_tag_token(token)
-  return SortableTableHeaderNode(field, title)
+  field, title, extra_th_class = parse_tag_token(token)
+  return SortableTableHeaderNode(field, title, extra_th_class)
 
 
 def sortable_url(parser, token):
-  field, title = parse_tag_token(token)
-  return SortableURLNode(field, title)
+  field, title, extra_th_class = parse_tag_token(token)
+  return SortableURLNode(field, title, extra_th_class)
 
 
 def sortable_class(parser, token):
-  field, title = parse_tag_token(token)
-  return SortableClassNode(field, title)
+  field, title, extra_th_class = parse_tag_token(token)
+  return SortableClassNode(field, title, extra_th_class)
 
 
 sortable_link = register.tag(sortable_link)
